@@ -3,7 +3,7 @@ import Navbar from "../components/Nav";
 import  FileUploader  from "../components/FileUploader";
 import {usePuterStore} from "../lib/Puter";
 import {useNavigate} from "react-router";
-//import {convertPdfToImage} from "~/lib/pdf2img";
+import {convertPdfToImage} from "~/lib/pdf2img";
 import {generateUUID} from "~/lib/utils";
 import {prepareInstructions} from "../constant";
 

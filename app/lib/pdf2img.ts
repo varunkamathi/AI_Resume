@@ -25,37 +25,55 @@ async function loadPdfJs(): Promise<any> {
     return loadPromise;
 }
 
-export async function convertPdfToImage(
-    file: File
-): Promise<PdfConversionResult> {
+export async function convertPdfToImage(file: File): Promise<PdfConversionResult> {
     try {
         const lib = await loadPdfJs();
-
         const arrayBuffer = await file.arrayBuffer();
         const pdf = await lib.getDocument({ data: arrayBuffer }).promise;
-        const page = await pdf.getPage(1);
 
-        const viewport = page.getViewport({ scale: 4 });
-        const canvas = document.createElement("canvas");
-        const context = canvas.getContext("2d");
+        const scale = 2.5;
+        const canvases: HTMLCanvasElement[] = [];
 
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale });
 
-        if (context) {
-            context.imageSmoothingEnabled = true;
-            context.imageSmoothingQuality = "high";
+            const canvas = document.createElement("canvas");
+            const context = canvas.getContext("2d");
+
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+
+            if (context) {
+                context.imageSmoothingEnabled = true;
+                context.imageSmoothingQuality = "high";
+            }
+
+            await page.render({ canvasContext: context!, viewport }).promise;
+            canvases.push(canvas);
         }
 
-        await page.render({ canvasContext: context!, viewport }).promise;
+        // Combine all canvases vertically
+        const totalHeight = canvases.reduce((sum, c) => sum + c.height, 0);
+        const maxWidth = Math.max(...canvases.map((c) => c.width));
+
+        const finalCanvas = document.createElement("canvas");
+        finalCanvas.width = maxWidth;
+        finalCanvas.height = totalHeight;
+
+        const finalContext = finalCanvas.getContext("2d")!;
+        let yOffset = 0;
+        canvases.forEach((c) => {
+            finalContext.drawImage(c, 0, yOffset);
+            yOffset += c.height;
+        });
 
         return new Promise((resolve) => {
-            canvas.toBlob(
+            finalCanvas.toBlob(
                 (blob) => {
                     if (blob) {
-                        // Create a File from the blob with the same name as the pdf
                         const originalName = file.name.replace(/\.pdf$/i, "");
-                        const imageFile = new File([blob], `${originalName}.png`, {
+                        const imageFile = new File([blob], `${originalName}-allpages.png`, {
                             type: "image/png",
                         });
 
@@ -67,13 +85,13 @@ export async function convertPdfToImage(
                         resolve({
                             imageUrl: "",
                             file: null,
-                            error: "Failed to create image blob",
+                            error: "Failed to create combined image blob",
                         });
                     }
                 },
                 "image/png",
                 1.0
-            ); // Set quality to maximum (1.0)
+            );
         });
     } catch (err) {
         return {
